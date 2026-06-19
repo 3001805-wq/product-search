@@ -1,0 +1,165 @@
+<!DOCTYPE html>
+<html lang="zh-Hant">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0">
+<title>商品查詢</title>
+<style>
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+  body {
+    font-family: -apple-system, BlinkMacSystemFont, "PingFang TC", "Microsoft JhengHei", sans-serif;
+    background: linear-gradient(180deg, #0f3d5c 0%, #1a5a8a 45%, #f4f7fa 45%, #f4f7fa 100%);
+    min-height: 100vh;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    padding: 0;
+  }
+  .header {
+    padding: 36px 24px 20px;
+    text-align: center;
+    color: #fff;
+  }
+  .header .logo {
+    font-size: 15px;
+    letter-spacing: 4px;
+    opacity: 0.85;
+    margin-bottom: 6px;
+  }
+  .header h1 {
+    font-size: 24px;
+    font-weight: 700;
+  }
+  .header p {
+    font-size: 13px;
+    opacity: 0.85;
+    margin-top: 6px;
+  }
+  .card {
+    width: 100%;
+    max-width: 420px;
+    background: #fff;
+    border-radius: 18px;
+    box-shadow: 0 8px 28px rgba(15,61,92,0.18);
+    padding: 28px 22px 26px;
+    margin: -36px 18px 24px;
+    position: relative;
+  }
+  .search-box {
+    display: flex;
+    align-items: center;
+    border: 2px solid #e3e9ee;
+    border-radius: 12px;
+    padding: 4px 4px 4px 16px;
+    transition: border-color 0.2s;
+  }
+  .search-box:focus-within {
+    border-color: #1a5a8a;
+  }
+  .search-box input {
+    flex: 1;
+    border: none;
+    outline: none;
+    font-size: 16px;
+    padding: 12px 8px;
+    background: transparent;
+  }
+  .search-box button {
+    background: #1a5a8a;
+    color: #fff;
+    border: none;
+    border-radius: 9px;
+    padding: 12px 20px;
+    font-size: 15px;
+    font-weight: 600;
+    cursor: pointer;
+    white-space: nowrap;
+    transition: background 0.15s;
+  }
+  .search-box button:active {
+    background: #0f3d5c;
+  }
+  .hint {
+    font-size: 12px;
+    color: #8a99a8;
+    margin-top: 10px;
+    padding-left: 4px;
+  }
+  .quick-tags {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 8px;
+    margin-top: 18px;
+  }
+  .quick-tags span {
+    font-size: 13px;
+    color: #1a5a8a;
+    background: #eaf2f8;
+    padding: 7px 14px;
+    border-radius: 20px;
+    cursor: pointer;
+    transition: background 0.15s;
+  }
+  .quick-tags span:active {
+    background: #d5e6f2;
+  }
+  .footer {
+    color: #8a99a8;
+    font-size: 11px;
+    text-align: center;
+    padding: 10px 24px 30px;
+  }
+</style>
+</head>
+<body>
+
+  <div class="header">
+    <div class="logo">統一車銷服務</div>
+    <h1>🔍 商品查詢</h1>
+    <p>輸入商品名稱，立即前往線上購物查看</p>
+  </div>
+
+  <div class="card">
+    <div class="search-box">
+      <input type="text" id="kw" placeholder="例如：可口可樂、洋芋片..." autocomplete="off" />
+      <button onclick="doSearch()">查詢</button>
+    </div>
+    <div class="hint">將自動連結至康達盛通（家樂福）線上購物搜尋結果</div>
+
+    <div class="quick-tags">
+      <span onclick="quickSearch('泡麵')">泡麵</span>
+      <span onclick="quickSearch('飲料')">飲料</span>
+      <span onclick="quickSearch('餅乾')">餅乾</span>
+      <span onclick="quickSearch('衛生紙')">衛生紙</span>
+      <span onclick="quickSearch('沙拉醬')">沙拉醬</span>
+      <span onclick="quickSearch('米')">米</span>
+    </div>
+  </div>
+
+  <div class="footer">資料來源：康達盛通線上購物（原家樂福線上購物）</div>
+
+<script>
+  const BASE_URL = "https://online.uni-prosperity.com.tw/zh/search/";
+
+  function doSearch() {
+    const kw = document.getElementById('kw').value.trim();
+    if (!kw) {
+      document.getElementById('kw').focus();
+      return;
+    }
+    const url = BASE_URL + "?q=" + encodeURIComponent(kw);
+    window.location.href = url;
+  }
+
+  function quickSearch(term) {
+    document.getElementById('kw').value = term;
+    doSearch();
+  }
+
+  document.getElementById('kw').addEventListener('keydown', function(e) {
+    if (e.key === 'Enter') doSearch();
+  });
+</script>
+
+</body>
+</html>
