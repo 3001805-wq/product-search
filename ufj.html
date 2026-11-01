@@ -1,0 +1,267 @@
+<!doctype html>
+<html lang="zh-Hant">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>萬家福快速採購</title>
+<style>
+:root{--bg:#f4f6f8;--card:#fff;--text:#1d2329;--muted:#6b7580;--line:#e3e7eb;--brand:#d6262d;--brand-2:#b51d23;--ok:#1f8a4c;--up:#d6262d;--down:#1f8a4c}
+@media (prefers-color-scheme:dark){:root{--bg:#121417;--card:#1c1f24;--text:#e8ebee;--muted:#98a1ab;--line:#2c3138}}
+*{box-sizing:border-box}
+body{margin:0;background:var(--bg);color:var(--text);font:15px/1.45 -apple-system,"PingFang TC","Noto Sans TC",sans-serif;padding-bottom:96px}
+header{position:sticky;top:0;z-index:5;background:var(--brand);color:#fff;padding:12px 16px 10px}
+header h1{margin:0 0 8px;font-size:17px;font-weight:700;display:flex;justify-content:space-between;align-items:center}
+header button.gear{background:none;border:0;color:#fff;font-size:20px;padding:0 4px}
+.searchbar{display:flex;gap:8px}
+.searchbar input{flex:1;min-width:0;border:0;border-radius:10px;padding:10px 12px;font-size:16px}
+.searchbar button{border:0;border-radius:10px;padding:0 16px;background:#fff;color:var(--brand);font-weight:700;font-size:15px}
+.tabs{display:flex;background:var(--card);border-bottom:1px solid var(--line)}
+.tabs button{flex:1;border:0;background:none;padding:11px 0;font-size:15px;color:var(--muted);border-bottom:3px solid transparent}
+.tabs button.on{color:var(--brand);border-color:var(--brand);font-weight:700}
+main{padding:12px 16px}
+.status{color:var(--muted);font-size:13px;margin:4px 0 10px}
+.item{display:flex;gap:10px;background:var(--card);border:1px solid var(--line);border-radius:12px;padding:10px;margin-bottom:10px}
+.item img{width:72px;height:72px;object-fit:contain;border-radius:8px;background:#fff;flex:none}
+.item .info{flex:1;min-width:0}
+.item .name{font-weight:600;font-size:14px;line-height:1.35;display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical;overflow:hidden}
+.item .meta{color:var(--muted);font-size:12px;margin-top:2px}
+.price{margin-top:4px;display:flex;align-items:baseline;gap:6px;flex-wrap:wrap}
+.price b{color:var(--brand);font-size:17px}
+.price s{color:var(--muted);font-size:12px}
+.chg{font-size:12px;font-weight:700}.chg.up{color:var(--up)}.chg.down{color:var(--down)}
+.row{display:flex;justify-content:space-between;align-items:center;margin-top:6px;gap:8px}
+.qty{display:flex;align-items:center;border:1px solid var(--line);border-radius:8px;overflow:hidden}
+.qty button{width:34px;height:32px;border:0;background:var(--bg);color:var(--text);font-size:18px}
+.qty input{width:40px;height:32px;border:0;text-align:center;font-size:15px;background:var(--card);color:var(--text)}
+.add{border:0;border-radius:8px;background:var(--brand);color:#fff;padding:7px 12px;font-size:14px;font-weight:600}
+.add.in{background:var(--ok)}
+.del{border:0;background:none;color:var(--muted);font-size:13px;text-decoration:underline}
+.bar{position:fixed;left:0;right:0;bottom:0;background:var(--card);border-top:1px solid var(--line);padding:10px 16px calc(10px + env(safe-area-inset-bottom));display:flex;align-items:center;gap:10px;z-index:6}
+.bar .sum{flex:1;font-size:13px;color:var(--muted)}.bar .sum b{display:block;font-size:18px;color:var(--text)}
+.bar button{border:0;border-radius:10px;background:var(--brand);color:#fff;padding:12px 14px;font-size:15px;font-weight:700}
+.bar button:disabled{opacity:.4}
+.tools{display:flex;gap:8px;margin-bottom:10px;flex-wrap:wrap}
+.tools button{border:1px solid var(--line);background:var(--card);color:var(--text);border-radius:8px;padding:8px 12px;font-size:14px}
+.empty{text-align:center;color:var(--muted);padding:40px 0}
+dialog{border:0;border-radius:14px;padding:18px;width:min(92vw,480px);background:var(--card);color:var(--text)}
+dialog::backdrop{background:rgba(0,0,0,.45)}
+dialog h2{margin:0 0 10px;font-size:17px}
+dialog label{display:block;font-size:13px;color:var(--muted);margin:10px 0 4px}
+dialog input,dialog textarea{width:100%;border:1px solid var(--line);border-radius:8px;padding:9px;font-size:14px;background:var(--bg);color:var(--text)}
+dialog textarea{height:90px;font-family:ui-monospace,monospace;font-size:11px}
+dialog ol{padding-left:20px;margin:6px 0;font-size:14px}
+dialog .btns{display:flex;gap:8px;justify-content:flex-end;margin-top:14px}
+dialog .btns button{border:0;border-radius:8px;padding:9px 14px;font-size:14px;background:var(--bg);color:var(--text)}
+dialog .btns button.primary{background:var(--brand);color:#fff}
+.toast{position:fixed;left:50%;bottom:90px;transform:translateX(-50%);background:#222;color:#fff;padding:9px 14px;border-radius:20px;font-size:14px;opacity:0;transition:.25s;pointer-events:none;z-index:9}
+.toast.show{opacity:1}
+</style>
+</head>
+<body>
+<header>
+  <h1>萬家福快速採購 <button class="gear" id="gear" aria-label="設定">⚙︎</button></h1>
+  <form class="searchbar" id="sf">
+    <input id="q" type="search" placeholder="搜尋商品，例如：泡麵、衛生紙" autocomplete="off">
+    <button>搜尋</button>
+  </form>
+</header>
+<nav class="tabs">
+  <button id="tSearch" class="on">搜尋結果</button>
+  <button id="tList">採購清單 <span id="cnt"></span></button>
+</nav>
+<main id="main"></main>
+<div class="bar">
+  <div class="sum">清單 <span id="bItems">0</span> 項・<span id="bQty">0</span> 件<b id="bTotal">$0</b></div>
+  <button id="toCart" disabled>加入萬家福購物車</button>
+</div>
+<div class="toast" id="toast"></div>
+
+<dialog id="dlgSet">
+  <h2>設定</h2>
+  <label>Apps Script 網址（部署後取得的 /exec 網址）</label>
+  <input id="gasUrl" placeholder="https://script.google.com/macros/s/.../exec">
+  <div class="btns"><button onclick="dlgSet.close()">取消</button><button class="primary" id="saveSet">儲存</button></div>
+</dialog>
+
+<dialog id="dlgCart">
+  <h2>送到萬家福購物車</h2>
+  <ol>
+    <li>先確認手機瀏覽器已登入萬家福線上購物</li>
+    <li>按下方「前往萬家福」</li>
+    <li>頁面打開後，點網址列輸入書籤名稱「<b>加入萬家福</b>」，點選它執行</li>
+  </ol>
+  <label>清單代碼（書籤沒讀到時，可複製貼上）</label>
+  <textarea id="code" readonly></textarea>
+  <div class="btns"><button id="copyCode">複製代碼</button><button class="primary" id="goUjf">前往萬家福</button></div>
+  <p style="font-size:12px;color:var(--muted);margin:12px 0 0">還沒裝書籤？<a href="#" id="howBm">看安裝方法</a></p>
+</dialog>
+
+<dialog id="dlgBm">
+  <h2>安裝「加入萬家福」書籤（只要做一次）</h2>
+  <ol>
+    <li>按「複製書籤程式碼」</li>
+    <li>在 Chrome／Safari 把目前這一頁加入書籤</li>
+    <li>編輯該書籤：名稱改成「加入萬家福」，網址整個刪掉、貼上剛剛複製的程式碼，儲存</li>
+  </ol>
+  <textarea id="bmCode" readonly></textarea>
+  <div class="btns"><button onclick="dlgBm.close()">關閉</button><button class="primary" id="copyBm">複製書籤程式碼</button></div>
+</dialog>
+
+<script>
+const UJF = 'https://online.uni-prosperity.com.tw';
+const STALE_MS = 6 * 3600 * 1000;
+const store = {
+  get(k, d) { try { const v = localStorage.getItem(k); return v ? JSON.parse(v) : d; } catch (e) { return d; } },
+  set(k, v) { try { localStorage.setItem(k, JSON.stringify(v)); } catch (e) {} }
+};
+let gas = store.get('gasUrl', '');
+let list = store.get('list', {});          // id -> {id,name,img,unit,url,price,prev,qty,ts}
+let results = [], resultInfo = '', tab = 'search', lastQ = '';
+
+const $ = id => document.getElementById(id);
+const money = n => '$' + (n == null ? '-' : Number(n).toLocaleString());
+const esc = s => String(s == null ? '' : s).replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
+function toast(t) { const el = $('toast'); el.textContent = t; el.classList.add('show'); clearTimeout(el._t); el._t = setTimeout(() => el.classList.remove('show'), 1800); }
+function save() { store.set('list', list); renderBar(); }
+
+async function api(params) {
+  if (!gas) { openSet(); throw new Error('請先設定 Apps Script 網址'); }
+  const r = await fetch(gas + '?' + new URLSearchParams(params));
+  const j = await r.json();
+  if (!j.ok) throw new Error(j.error || '讀取失敗');
+  return j;
+}
+
+/* 搜尋 */
+$('sf').onsubmit = async e => {
+  e.preventDefault();
+  const q = $('q').value.trim(); if (!q) return;
+  lastQ = q; setTab('search');
+  resultInfo = '搜尋中…'; results = []; render();
+  try {
+    const j = await api({ action: 'search', q, pages: 2 });
+    results = j.items;
+    resultInfo = `「${esc(q)}」共 ${j.count} 項` + (j.onlineOnly ? '・已排除商城商品' : '・⚠ 未套用線上購物篩選') + `・${new Date(j.updated).toLocaleTimeString('zh-TW', {hour:'2-digit',minute:'2-digit'})} 更新`;
+    results.forEach(it => { if (list[it.id]) updateFromFresh(list[it.id], it.price); });
+    save();
+  } catch (err) { resultInfo = '⚠ ' + esc(err.message); }
+  render();
+};
+
+function updateFromFresh(item, price) {
+  if (price == null) return;
+  if (item.price != null && item.price !== price) item.prev = item.price;
+  item.price = price; item.ts = Date.now();
+}
+
+/* 更新清單價格 */
+async function refreshPrices(silent) {
+  const ids = Object.keys(list); if (!ids.length) return;
+  if (!silent) toast('更新價格中…');
+  try {
+    const j = await api({ action: 'prices', ids: ids.join(',') });
+    let changed = 0, gone = 0;
+    ids.forEach(id => {
+      const p = j.prices[id]; if (!p) return;
+      if (!p.available) { list[id].unavailable = true; gone++; return; }
+      list[id].unavailable = false;
+      const before = list[id].price; updateFromFresh(list[id], p.price);
+      if (before !== list[id].price) changed++;
+    });
+    store.set('listTs', Date.now()); save(); render();
+    toast(`價格已更新・${changed} 項變動` + (gone ? `・${gone} 項查無` : ''));
+  } catch (err) { if (!silent) toast('⚠ ' + err.message); }
+}
+
+/* 清單操作 */
+function addItem(it, qty) {
+  if (list[it.id]) list[it.id].qty += qty;
+  else list[it.id] = { id: it.id, name: it.name, img: it.img, unit: it.unit, url: it.url, price: it.price, prev: null, qty, ts: Date.now() };
+  save(); render(); toast('已加入清單');
+}
+function setQty(id, q) { if (!list[id]) return; list[id].qty = Math.max(1, Math.min(99, q | 0 || 1)); save(); render(); }
+function removeItem(id) { delete list[id]; save(); render(); }
+
+/* 畫面 */
+function setTab(t) { tab = t; $('tSearch').classList.toggle('on', t === 'search'); $('tList').classList.toggle('on', t === 'list'); render(); }
+$('tSearch').onclick = () => setTab('search');
+$('tList').onclick = () => setTab('list');
+
+function qtyBox(id, val, onSet) {
+  return `<div class="qty"><button data-a="minus" data-id="${id}">−</button><input data-a="q" data-id="${id}" inputmode="numeric" value="${val}"><button data-a="plus" data-id="${id}">＋</button></div>`;
+}
+function card(it, inList) {
+  const chg = inList && it.prev != null && it.prev !== it.price
+    ? `<span class="chg ${it.price > it.prev ? 'up' : 'down'}">${it.price > it.prev ? '▲' : '▼'} 原 ${money(it.prev)}</span>` : '';
+  const right = inList
+    ? `${qtyBox(it.id, it.qty)}<button class="del" data-a="del" data-id="${it.id}">移除</button>`
+    : `${qtyBox(it.id, 1)}<button class="add ${list[it.id] ? 'in' : ''}" data-a="add" data-id="${it.id}">${list[it.id] ? '再加' : '加入'}</button>`;
+  return `<div class="item">
+    <img src="${esc(it.img)}" alt="" loading="lazy" onerror="this.style.visibility='hidden'">
+    <div class="info">
+      <a class="name" href="${esc(it.url)}" target="_blank" rel="noopener" style="color:inherit;text-decoration:none">${esc(it.name)}</a>
+      <div class="meta">${it.unit ? esc(it.unit) + '入・' : ''}${esc(it.id)}${it.unavailable ? '・<b style="color:var(--up)">查無／下架</b>' : ''}</div>
+      <div class="price"><b>${money(it.price)}</b>${it.list ? `<s>${money(it.list)}</s>` : ''}${chg}</div>
+      <div class="row">${right}</div>
+    </div></div>`;
+}
+function render() {
+  const n = Object.keys(list).length; $('cnt').textContent = n ? `(${n})` : '';
+  let h = '';
+  if (tab === 'search') {
+    h += `<div class="status">${resultInfo || '輸入關鍵字搜尋萬家福線上購物商品'}</div>`;
+    h += results.length ? results.map(it => card(it, false)).join('') : (resultInfo && !resultInfo.includes('中…') ? '<div class="empty">沒有找到商品</div>' : '');
+  } else {
+    const ts = store.get('listTs', 0);
+    h += `<div class="tools"><button data-a="refresh">↻ 更新價格</button><button data-a="clear">清空清單</button></div>`;
+    h += `<div class="status">${ts ? '價格更新於 ' + new Date(ts).toLocaleString('zh-TW', {month:'numeric',day:'numeric',hour:'2-digit',minute:'2-digit'}) : '尚未更新價格'}</div>`;
+    h += n ? Object.values(list).map(it => card(it, true)).join('') : '<div class="empty">清單是空的，先去搜尋加入商品</div>';
+  }
+  $('main').innerHTML = h; renderBar();
+}
+function renderBar() {
+  const items = Object.values(list);
+  $('bItems').textContent = items.length;
+  $('bQty').textContent = items.reduce((s, i) => s + i.qty, 0);
+  $('bTotal').textContent = money(items.reduce((s, i) => s + (i.price || 0) * i.qty, 0));
+  $('toCart').disabled = !items.length;
+}
+
+$('main').addEventListener('click', e => {
+  const b = e.target.closest('[data-a]'); if (!b) return;
+  const id = b.dataset.id, a = b.dataset.a;
+  const row = b.closest('.row'); const inp = row && row.querySelector('input');
+  if (a === 'minus' || a === 'plus') {
+    const v = Math.max(1, (parseInt(inp.value, 10) || 1) + (a === 'plus' ? 1 : -1));
+    if (tab === 'list') setQty(id, v); else inp.value = v;
+  } else if (a === 'add') { const it = results.find(r => r.id === id); if (it) addItem(it, parseInt(inp.value, 10) || 1); }
+  else if (a === 'del') removeItem(id);
+  else if (a === 'refresh') refreshPrices(false);
+  else if (a === 'clear') { if (confirm('確定清空採購清單？')) { list = {}; save(); render(); } }
+});
+$('main').addEventListener('change', e => { if (e.target.dataset.a === 'q' && tab === 'list') setQty(e.target.dataset.id, parseInt(e.target.value, 10)); });
+
+/* 設定 */
+function openSet() { $('gasUrl').value = gas; $('dlgSet').showModal(); }
+$('gear').onclick = openSet;
+$('saveSet').onclick = () => { gas = $('gasUrl').value.trim(); store.set('gasUrl', gas); $('dlgSet').close(); toast('已儲存'); };
+
+/* 加入萬家福購物車 */
+const listCode = () => Object.values(list).map(i => i.id + ':' + i.qty).join(',');
+$('toCart').onclick = () => { $('code').value = listCode(); $('dlgCart').showModal(); };
+$('goUjf').onclick = () => { location.href = UJF + '/zh/cart/#ujf=' + encodeURIComponent(listCode()); };
+async function copy(t) { try { await navigator.clipboard.writeText(t); toast('已複製'); } catch (e) { toast('請長按文字框手動複製'); } }
+$('copyCode').onclick = () => copy($('code').value);
+
+const BOOKMARKLET = "javascript:(async()=>{const m=location.hash.match(/ujf=([^&]+)/);let s=m?decodeURIComponent(m[1]):prompt('貼上清單代碼');if(!s)return;const L=s.split(',').map(x=>x.split(':')).filter(a=>/^\\d{8,}$/.test(a[0]));if(!L.length){alert('清單代碼格式不對');return}const e=document.querySelector('.add-to-cart-url,[name=addToCartUrl]');const U=[e&&e.value,'/on/demandware.store/Sites-Uniprosperity-Site/zh_TW/Cart-AddProduct','/on/demandware.store/Sites-Uniprosperity-Site/default/Cart-AddProduct'].filter(Boolean);const t=document.querySelector('[name=csrf_token]');let ok=0,bad=[];for(const[p,n]of L){let d=false;for(const u of U){try{const b=new URLSearchParams({pid:p,quantity:n||1,options:'[]'});if(t)b.append('csrf_token',t.value);const r=await fetch(u,{method:'POST',body:b,credentials:'include',headers:{'X-Requested-With':'XMLHttpRequest'}});const j=await r.json().catch(()=>null);if(r.ok&&j&&!j.error){d=true;break}}catch(x){}}d?ok++:bad.push(p)}alert('加入完成：成功 '+ok+' 項'+(bad.length?'\\n失敗：'+bad.join(', '):''));location.href='/zh/cart/'})()";
+$('bmCode').value = BOOKMARKLET;
+$('howBm').onclick = e => { e.preventDefault(); $('dlgCart').close(); $('dlgBm').showModal(); };
+$('copyBm').onclick = () => copy(BOOKMARKLET);
+
+/* 開啟時：清單價格超過 6 小時自動更新 */
+render();
+if (gas && Object.keys(list).length && Date.now() - store.get('listTs', 0) > STALE_MS) refreshPrices(true);
+if (!gas) setTimeout(openSet, 300);
+</script>
+</body>
+</html>
