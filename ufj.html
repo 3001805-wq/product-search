@@ -3,7 +3,7 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
-<title>萬家福快速採購</title>
+<title>萬家福行動商店購物車</title>
 <style>
 :root{--bg:#f4f6f8;--card:#fff;--text:#1d2329;--muted:#6b7580;--line:#e3e7eb;--brand:#d6262d;--brand-2:#b51d23;--ok:#1f8a4c;--up:#d6262d;--down:#1f8a4c}
 @media (prefers-color-scheme:dark){:root{--bg:#121417;--card:#1c1f24;--text:#e8ebee;--muted:#98a1ab;--line:#2c3138}}
@@ -59,7 +59,7 @@ dialog .btns button.primary{background:var(--brand);color:#fff}
 </head>
 <body>
 <header>
-  <h1>萬家福快速採購 <button class="gear" id="gear" aria-label="設定">⚙︎</button></h1>
+  <h1>萬家福行動商店購物車</h1>
   <form class="searchbar" id="sf">
     <input id="q" type="search" placeholder="搜尋商品，例如：泡麵、衛生紙" autocomplete="off">
     <button>搜尋</button>
@@ -72,39 +72,17 @@ dialog .btns button.primary{background:var(--brand);color:#fff}
 <main id="main"></main>
 <div class="bar">
   <div class="sum">清單 <span id="bItems">0</span> 項・<span id="bQty">0</span> 件<b id="bTotal">$0</b></div>
-  <button id="toCart" disabled>加入萬家福購物車</button>
+  <button id="shot" disabled>截圖購物車列表</button>
 </div>
 <div class="toast" id="toast"></div>
 
-<dialog id="dlgSet">
-  <h2>設定</h2>
-  <label>Apps Script 網址（部署後取得的 /exec 網址）</label>
-  <input id="gasUrl" placeholder="https://script.google.com/macros/s/.../exec">
-  <div class="btns"><button onclick="dlgSet.close()">取消</button><button class="primary" id="saveSet">儲存</button></div>
-</dialog>
 
-<dialog id="dlgCart">
-  <h2>送到萬家福購物車</h2>
-  <ol>
-    <li>先確認手機瀏覽器已登入萬家福線上購物</li>
-    <li>按下方「前往萬家福」</li>
-    <li>頁面打開後，點網址列輸入書籤名稱「<b>加入萬家福</b>」，點選它執行</li>
-  </ol>
-  <label>清單代碼（書籤沒讀到時，可複製貼上）</label>
-  <textarea id="code" readonly></textarea>
-  <div class="btns"><button id="copyCode">複製代碼</button><button class="primary" id="goUjf">前往萬家福</button></div>
-  <p style="font-size:12px;color:var(--muted);margin:12px 0 0">還沒裝書籤？<a href="#" id="howBm">看安裝方法</a></p>
-</dialog>
 
-<dialog id="dlgBm">
-  <h2>安裝「加入萬家福」書籤（只要做一次）</h2>
-  <ol>
-    <li>按「複製書籤程式碼」</li>
-    <li>在 Chrome／Safari 把目前這一頁加入書籤</li>
-    <li>編輯該書籤：名稱改成「加入萬家福」，網址整個刪掉、貼上剛剛複製的程式碼，儲存</li>
-  </ol>
-  <textarea id="bmCode" readonly></textarea>
-  <div class="btns"><button onclick="dlgBm.close()">關閉</button><button class="primary" id="copyBm">複製書籤程式碼</button></div>
+<dialog id="dlgShot">
+  <h2>購物車列表截圖</h2>
+  <p style="font-size:13px;color:var(--muted);margin:0 0 8px">按「分享到 LINE」後，在分享選單選 LINE 即可傳送；也可長按圖片儲存</p>
+  <div style="max-height:60vh;overflow:auto;border:1px solid var(--line);border-radius:8px"><img id="shotImg" alt="購物車列表" style="width:100%;display:block"></div>
+  <div class="btns"><button onclick="dlgShot.close()">關閉</button><button id="dlShot">下載圖片</button><button class="primary" id="shareShot" style="background:#06c755">分享到 LINE</button></div>
 </dialog>
 
 <script>
@@ -114,7 +92,7 @@ const store = {
   get(k, d) { try { const v = localStorage.getItem(k); return v ? JSON.parse(v) : d; } catch (e) { return d; } },
   set(k, v) { try { localStorage.setItem(k, JSON.stringify(v)); } catch (e) {} }
 };
-let gas = store.get('gasUrl', '');
+const gas = 'https://script.google.com/macros/s/AKfycbwOyJGrZv_NFhEUCGpWD72AyEdWpq3D1qZlQ8rjs4IK3TNTVjDmm_OzG57E7mC35hg-/exec';
 let list = store.get('list', {});          // id -> {id,name,img,unit,url,price,prev,qty,ts}
 let results = [], resultInfo = '', tab = 'search', lastQ = '';
 
@@ -125,7 +103,6 @@ function toast(t) { const el = $('toast'); el.textContent = t; el.classList.add(
 function save() { store.set('list', list); renderBar(); }
 
 async function api(params) {
-  if (!gas) { openSet(); throw new Error('請先設定 Apps Script 網址'); }
   const r = await fetch(gas + '?' + new URLSearchParams(params));
   const j = await r.json();
   if (!j.ok) throw new Error(j.error || '讀取失敗');
@@ -224,7 +201,7 @@ function renderBar() {
   $('bItems').textContent = items.length;
   $('bQty').textContent = items.reduce((s, i) => s + i.qty, 0);
   $('bTotal').textContent = money(items.reduce((s, i) => s + (i.price || 0) * i.qty, 0));
-  $('toCart').disabled = !items.length;
+  $('shot').disabled = !items.length;
 }
 
 $('main').addEventListener('click', e => {
@@ -241,27 +218,95 @@ $('main').addEventListener('click', e => {
 });
 $('main').addEventListener('change', e => { if (e.target.dataset.a === 'q' && tab === 'list') setQty(e.target.dataset.id, parseInt(e.target.value, 10)); });
 
-/* 設定 */
-function openSet() { $('gasUrl').value = gas; $('dlgSet').showModal(); }
-$('gear').onclick = openSet;
-$('saveSet').onclick = () => { gas = $('gasUrl').value.trim(); store.set('gasUrl', gas); $('dlgSet').close(); toast('已儲存'); };
+/* 截圖購物車列表 */
+function wrapLines(ctx, text, maxW) {
+  const out = []; let line = '';
+  for (const ch of String(text)) {
+    if (ctx.measureText(line + ch).width > maxW && line) { out.push(line); line = ch; } else line += ch;
+  }
+  if (line) out.push(line);
+  return out;
+}
+function drawList() {
+  const items = Object.values(list);
+  const W = 1080, P = 48, scale = 1;
+  const font = '"PingFang TC","Noto Sans TC","Microsoft JhengHei",sans-serif';
+  const cols = { name: P, qty: 700, price: 820, sub: W - P };   // 右對齊欄位的右邊界
+  const c = document.createElement('canvas'), ctx = c.getContext('2d');
+  // 先算高度
+  ctx.font = `600 34px ${font}`;
+  const rows = items.map(it => {
+    ctx.font = `600 32px ${font}`;
+    const lines = wrapLines(ctx, it.name, 560);
+    return { it, lines, h: Math.max(lines.length * 42 + 52, 104) };
+  });
+  const headerH = 190, tableHead = 64, footH = 150;
+  const H = headerH + tableHead + rows.reduce((s, r) => s + r.h, 0) + footH;
+  c.width = W * scale; c.height = H * scale; ctx.scale(scale, scale);
 
-/* 加入萬家福購物車 */
-const listCode = () => Object.values(list).map(i => i.id + ':' + i.qty).join(',');
-$('toCart').onclick = () => { $('code').value = listCode(); $('dlgCart').showModal(); };
-$('goUjf').onclick = () => { location.href = UJF + '/zh/cart/#ujf=' + encodeURIComponent(listCode()); };
-async function copy(t) { try { await navigator.clipboard.writeText(t); toast('已複製'); } catch (e) { toast('請長按文字框手動複製'); } }
-$('copyCode').onclick = () => copy($('code').value);
+  ctx.fillStyle = '#ffffff'; ctx.fillRect(0, 0, W, H);
+  ctx.fillStyle = '#d6262d'; ctx.fillRect(0, 0, W, 130);
+  ctx.fillStyle = '#ffffff'; ctx.font = `700 46px ${font}`; ctx.textBaseline = 'middle';
+  ctx.fillText('萬家福行動商店購物車', P, 66);
+  ctx.font = `400 28px ${font}`; ctx.textAlign = 'right';
+  const now = new Date();
+  ctx.fillText(now.toLocaleDateString('zh-TW') + ' ' + now.toLocaleTimeString('zh-TW', { hour: '2-digit', minute: '2-digit' }), W - P, 66);
+  ctx.textAlign = 'left'; ctx.fillStyle = '#6b7580'; ctx.font = `400 26px ${font}`;
+  const ts = store.get('listTs', 0);
+  ctx.fillText(`共 ${items.length} 項・${items.reduce((s, i) => s + i.qty, 0)} 件` + (ts ? `・價格更新於 ${new Date(ts).toLocaleString('zh-TW', { month: 'numeric', day: 'numeric', hour: '2-digit', minute: '2-digit' })}` : ''), P, 162);
 
-const BOOKMARKLET = "javascript:(async()=>{const m=location.hash.match(/ujf=([^&]+)/);let s=m?decodeURIComponent(m[1]):prompt('貼上清單代碼');if(!s)return;const L=s.split(',').map(x=>x.split(':')).filter(a=>/^\\d{8,}$/.test(a[0]));if(!L.length){alert('清單代碼格式不對');return}const e=document.querySelector('.add-to-cart-url,[name=addToCartUrl]');const U=[e&&e.value,'/on/demandware.store/Sites-Uniprosperity-Site/zh_TW/Cart-AddProduct','/on/demandware.store/Sites-Uniprosperity-Site/default/Cart-AddProduct'].filter(Boolean);const t=document.querySelector('[name=csrf_token]');let ok=0,bad=[];for(const[p,n]of L){let d=false;for(const u of U){try{const b=new URLSearchParams({pid:p,quantity:n||1,options:'[]'});if(t)b.append('csrf_token',t.value);const r=await fetch(u,{method:'POST',body:b,credentials:'include',headers:{'X-Requested-With':'XMLHttpRequest'}});const j=await r.json().catch(()=>null);if(r.ok&&j&&!j.error){d=true;break}}catch(x){}}d?ok++:bad.push(p)}alert('加入完成：成功 '+ok+' 項'+(bad.length?'\\n失敗：'+bad.join(', '):''));location.href='/zh/cart/'})()";
-$('bmCode').value = BOOKMARKLET;
-$('howBm').onclick = e => { e.preventDefault(); $('dlgCart').close(); $('dlgBm').showModal(); };
-$('copyBm').onclick = () => copy(BOOKMARKLET);
+  let y = headerH;
+  ctx.fillStyle = '#f1f3f5'; ctx.fillRect(0, y, W, tableHead);
+  ctx.fillStyle = '#495057'; ctx.font = `600 26px ${font}`;
+  const mid = y + tableHead / 2;
+  ctx.textAlign = 'left'; ctx.fillText('品名／編號', cols.name, mid);
+  ctx.textAlign = 'right'; ctx.fillText('數量', cols.qty, mid); ctx.fillText('單價', cols.price, mid); ctx.fillText('小計', cols.sub, mid);
+  y += tableHead;
+
+  let total = 0;
+  rows.forEach((r, i) => {
+    const it = r.it, sub = (it.price || 0) * it.qty; total += sub;
+    if (i % 2) { ctx.fillStyle = '#fafbfc'; ctx.fillRect(0, y, W, r.h); }
+    ctx.textBaseline = 'top'; ctx.textAlign = 'left';
+    ctx.fillStyle = '#1d2329'; ctx.font = `600 32px ${font}`;
+    r.lines.forEach((ln, k) => ctx.fillText(ln, cols.name, y + 16 + k * 42));
+    ctx.fillStyle = '#868e96'; ctx.font = `400 24px ${font}`;
+    ctx.fillText(it.id + (it.unit ? `・${it.unit}入` : '') + (it.unavailable ? '・查無／下架' : ''), cols.name, y + 16 + r.lines.length * 42);
+    ctx.textAlign = 'right'; ctx.fillStyle = '#1d2329'; ctx.font = `700 32px ${font}`;
+    ctx.fillText('× ' + it.qty, cols.qty, y + 16);
+    ctx.font = `400 30px ${font}`; ctx.fillText(money(it.price), cols.price, y + 18);
+    ctx.font = `700 32px ${font}`; ctx.fillStyle = '#d6262d'; ctx.fillText(money(sub), cols.sub, y + 16);
+    y += r.h;
+    ctx.fillStyle = '#e3e7eb'; ctx.fillRect(P, y - 1, W - P * 2, 1);
+  });
+
+  ctx.textBaseline = 'middle';
+  ctx.fillStyle = '#1d2329'; ctx.font = `700 36px ${font}`; ctx.textAlign = 'left';
+  ctx.fillText('合計', P, y + 70);
+  ctx.textAlign = 'right'; ctx.fillStyle = '#d6262d'; ctx.font = `800 52px ${font}`;
+  ctx.fillText(money(total), W - P, y + 70);
+  return c;
+}
+let shotBlob = null;
+$('shot').onclick = () => {
+  const c = drawList();
+  $('shotImg').src = c.toDataURL('image/png');
+  c.toBlob(b => { shotBlob = b; }, 'image/png');
+  $('dlgShot').showModal();
+};
+const shotName = () => '萬家福購物車_' + new Date().toISOString().slice(0, 10) + '.png';
+$('dlShot').onclick = () => { const a = document.createElement('a'); a.href = $('shotImg').src; a.download = shotName(); a.click(); };
+$('shareShot').onclick = async () => {
+  try {
+    const f = new File([shotBlob], shotName(), { type: 'image/png' });
+    if (navigator.canShare && navigator.canShare({ files: [f] })) await navigator.share({ files: [f], title: '萬家福行動商店購物車' });
+    else { $('dlShot').click(); toast('這個瀏覽器不支援分享，已改為下載'); }
+  } catch (e) { if (e.name !== 'AbortError') toast('分享失敗，請長按圖片儲存'); }
+};
 
 /* 開啟時：清單價格超過 6 小時自動更新 */
 render();
 if (gas && Object.keys(list).length && Date.now() - store.get('listTs', 0) > STALE_MS) refreshPrices(true);
-if (!gas) setTimeout(openSet, 300);
 </script>
 </body>
 </html>
