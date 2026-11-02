@@ -20,6 +20,10 @@ header button.gear{background:none;border:0;color:#fff;font-size:20px;padding:0 
 .tabs button.on{color:var(--brand);border-color:var(--brand);font-weight:700}
 main{padding:12px 16px}
 .status{color:var(--muted);font-size:13px;margin:4px 0 10px}
+.notice{color:#d6262d;font-weight:700;font-size:15px;margin:2px 0 10px}
+.nosub{display:flex;align-items:center;gap:4px;font-size:13px;color:var(--text);white-space:nowrap;margin-left:auto}
+.nosub input{width:18px;height:18px;accent-color:#d6262d;margin:0}
+.nosub.on{color:#d6262d;font-weight:700}
 .item{display:flex;gap:10px;background:var(--card);border:1px solid var(--line);border-radius:12px;padding:10px;margin-bottom:10px}
 .item img{width:72px;height:72px;object-fit:contain;border-radius:8px;background:#fff;flex:none}
 .item .info{flex:1;min-width:0}
@@ -92,9 +96,10 @@ const store = {
   get(k, d) { try { const v = localStorage.getItem(k); return v ? JSON.parse(v) : d; } catch (e) { return d; } },
   set(k, v) { try { localStorage.setItem(k, JSON.stringify(v)); } catch (e) {} }
 };
-const gas = 'https://script.google.com/macros/s/AKfycbwOyJGrZv_NFhEUCGpWD72AyEdWpq3D1qZlQ8rjs4IK3TNTVjDmm_OzG57E7mC35hg-/exec';
+const gas = 'https://script.google.com/macros/s/AKfycbyB9bPki1EyERkVm0JDrDGFSeIVNJ00RZWQl22wyqOHbfCyi8noWKzNlUlpUIymcEm3/exec';
 let list = store.get('list', {});          // id -> {id,name,img,unit,url,price,prev,qty,ts}
 let results = [], resultInfo = '', tab = 'search', lastQ = '';
+const pendingNoSub = {};   // 尚未加入清單的商品，先記住「請勿更換」勾選
 
 const $ = id => document.getElementById(id);
 const money = n => '$' + (n == null ? '-' : Number(n).toLocaleString());
@@ -118,7 +123,7 @@ $('sf').onsubmit = async e => {
   try {
     const j = await api({ action: 'search', q, pages: 2 });
     results = j.items;
-    resultInfo = `「${esc(q)}」共 ${j.count} 項` + (j.onlineOnly ? '・已排除商城商品' : '・⚠ 未套用線上購物篩選') + `・${new Date(j.updated).toLocaleTimeString('zh-TW', {hour:'2-digit',minute:'2-digit'})} 更新`;
+    resultInfo = j.count ? '' : `找不到「${esc(q)}」相關商品`;
     results.forEach(it => { if (list[it.id]) updateFromFresh(list[it.id], it.price); });
     save();
   } catch (err) { resultInfo = '⚠ ' + esc(err.message); }
@@ -153,11 +158,15 @@ async function refreshPrices(silent) {
 /* 清單操作 */
 function addItem(it, qty) {
   if (list[it.id]) list[it.id].qty += qty;
-  else list[it.id] = { id: it.id, name: it.name, img: it.img, unit: it.unit, url: it.url, price: it.price, prev: null, qty, ts: Date.now() };
+  else list[it.id] = { id: it.id, name: it.name, img: it.img, unit: it.unit, url: it.url, price: it.price, prev: null, qty, ts: Date.now(), noSub: !!pendingNoSub[it.id] };
   save(); render(); toast('已加入清單');
 }
 function setQty(id, q) { if (!list[id]) return; list[id].qty = Math.max(1, Math.min(99, q | 0 || 1)); save(); render(); }
 function removeItem(id) { delete list[id]; save(); render(); }
+function setNoSub(id, on) {
+  if (list[id]) { list[id].noSub = on; save(); } else pendingNoSub[id] = on;
+  render();
+}
 
 /* 畫面 */
 function setTab(t) { tab = t; $('tSearch').classList.toggle('on', t === 'search'); $('tList').classList.toggle('on', t === 'list'); render(); }
@@ -170,9 +179,11 @@ function qtyBox(id, val, onSet) {
 function card(it, inList) {
   const chg = inList && it.prev != null && it.prev !== it.price
     ? `<span class="chg ${it.price > it.prev ? 'up' : 'down'}">${it.price > it.prev ? '▲' : '▼'} 原 ${money(it.prev)}</span>` : '';
+  const ns = list[it.id] ? !!list[it.id].noSub : !!pendingNoSub[it.id];
+  const box = `<label class="nosub ${ns ? 'on' : ''}"><input type="checkbox" data-a="nosub" data-id="${it.id}" ${ns ? 'checked' : ''}>請勿更換</label>`;
   const right = inList
-    ? `${qtyBox(it.id, it.qty)}<button class="del" data-a="del" data-id="${it.id}">移除</button>`
-    : `${qtyBox(it.id, 1)}<button class="add ${list[it.id] ? 'in' : ''}" data-a="add" data-id="${it.id}">${list[it.id] ? '再加' : '加入'}</button>`;
+    ? `${qtyBox(it.id, it.qty)}${box}<button class="del" data-a="del" data-id="${it.id}">移除</button>`
+    : `${qtyBox(it.id, 1)}${box}<button class="add ${list[it.id] ? 'in' : ''}" data-a="add" data-id="${it.id}">${list[it.id] ? '再加' : '加入'}</button>`;
   return `<div class="item">
     <img src="${esc(it.img)}" alt="" loading="lazy" onerror="this.style.visibility='hidden'">
     <div class="info">
@@ -186,8 +197,9 @@ function render() {
   const n = Object.keys(list).length; $('cnt').textContent = n ? `(${n})` : '';
   let h = '';
   if (tab === 'search') {
-    h += `<div class="status">${resultInfo || '輸入關鍵字搜尋萬家福線上購物商品'}</div>`;
-    h += results.length ? results.map(it => card(it, false)).join('') : (resultInfo && !resultInfo.includes('中…') ? '<div class="empty">沒有找到商品</div>' : '');
+    h += `<div class="notice">如果此商品售完，我們將為您選擇替代商品</div>`;
+    if (resultInfo) h += `<div class="status">${resultInfo}</div>`;
+    h += results.map(it => card(it, false)).join('');
   } else {
     const ts = store.get('listTs', 0);
     h += `<div class="tools"><button data-a="refresh">↻ 更新價格</button><button data-a="clear">清空清單</button></div>`;
@@ -205,7 +217,7 @@ function renderBar() {
 }
 
 $('main').addEventListener('click', e => {
-  const b = e.target.closest('[data-a]'); if (!b) return;
+  const b = e.target.closest('[data-a]'); if (!b || b.dataset.a === 'nosub') return;
   const id = b.dataset.id, a = b.dataset.a;
   const row = b.closest('.row'); const inp = row && row.querySelector('input');
   if (a === 'minus' || a === 'plus') {
@@ -216,7 +228,11 @@ $('main').addEventListener('click', e => {
   else if (a === 'refresh') refreshPrices(false);
   else if (a === 'clear') { if (confirm('確定清空採購清單？')) { list = {}; save(); render(); } }
 });
-$('main').addEventListener('change', e => { if (e.target.dataset.a === 'q' && tab === 'list') setQty(e.target.dataset.id, parseInt(e.target.value, 10)); });
+$('main').addEventListener('change', e => {
+  const t = e.target;
+  if (t.dataset.a === 'q' && tab === 'list') setQty(t.dataset.id, parseInt(t.value, 10));
+  if (t.dataset.a === 'nosub') setNoSub(t.dataset.id, t.checked);
+});
 
 /* 截圖購物車列表 */
 function wrapLines(ctx, text, maxW) {
@@ -227,39 +243,73 @@ function wrapLines(ctx, text, maxW) {
   if (line) out.push(line);
   return out;
 }
-function drawList() {
+// 載入縮圖：先直接載入，不行就請 Apps Script 轉成 data URL
+const imgCache = {};
+function loadImage(src, cors) {
+  return new Promise(res => {
+    const im = new Image();
+    if (cors) im.crossOrigin = 'anonymous';
+    const t = setTimeout(() => res(null), 5000);
+    im.onload = () => { clearTimeout(t); res(im); };
+    im.onerror = () => { clearTimeout(t); res(null); };
+    im.src = src;
+  });
+}
+async function loadThumbs(items) {
+  const out = {}, need = [];
+  await Promise.all(items.map(async it => {
+    if (!it.img) return;
+    if (imgCache[it.img]) { out[it.id] = imgCache[it.img]; return; }
+    const im = await loadImage(it.img, true);
+    if (im) { imgCache[it.img] = im; out[it.id] = im; } else need.push(it);
+  }));
+  for (let i = 0; i < need.length; i += 6) {
+    const batch = need.slice(i, i + 6);
+    try {
+      const j = await api({ action: 'imgs', u: batch.map(x => x.img).join('|') });
+      await Promise.all(batch.map(async it => {
+        const d = j.images && j.images[it.img]; if (!d) return;
+        const im = await loadImage(d, false);
+        if (im) { imgCache[it.img] = im; out[it.id] = im; }
+      }));
+    } catch (e) {}
+  }
+  return out;
+}
+
+async function drawList() {
   const items = Object.values(list);
-  const W = 1080, P = 48, scale = 1;
+  const thumbs = await loadThumbs(items);
+  const W = 1200, P = 48, TH = 76;
   const font = '"PingFang TC","Noto Sans TC","Microsoft JhengHei",sans-serif';
-  const cols = { name: P, qty: 700, price: 820, sub: W - P };   // 右對齊欄位的右邊界
+  const cols = { thumb: P, name: P + TH + 18, note: 770, qty: 900, price: 1030, sub: W - P };
   const c = document.createElement('canvas'), ctx = c.getContext('2d');
-  // 先算高度
-  ctx.font = `600 34px ${font}`;
   const rows = items.map(it => {
-    ctx.font = `600 32px ${font}`;
-    const lines = wrapLines(ctx, it.name, 560);
-    return { it, lines, h: Math.max(lines.length * 42 + 52, 104) };
+    ctx.font = `600 30px ${font}`;
+    const lines = wrapLines(ctx, it.name, cols.note - 70 - cols.name);
+    return { it, lines, h: Math.max(lines.length * 40 + 52, 104) };
   });
   const headerH = 190, tableHead = 64, footH = 150;
   const H = headerH + tableHead + rows.reduce((s, r) => s + r.h, 0) + footH;
-  c.width = W * scale; c.height = H * scale; ctx.scale(scale, scale);
+  c.width = W; c.height = H;
 
   ctx.fillStyle = '#ffffff'; ctx.fillRect(0, 0, W, H);
   ctx.fillStyle = '#d6262d'; ctx.fillRect(0, 0, W, 130);
-  ctx.fillStyle = '#ffffff'; ctx.font = `700 46px ${font}`; ctx.textBaseline = 'middle';
+  ctx.fillStyle = '#ffffff'; ctx.font = `700 46px ${font}`; ctx.textBaseline = 'middle'; ctx.textAlign = 'left';
   ctx.fillText('萬家福行動商店購物車', P, 66);
   ctx.font = `400 28px ${font}`; ctx.textAlign = 'right';
   const now = new Date();
   ctx.fillText(now.toLocaleDateString('zh-TW') + ' ' + now.toLocaleTimeString('zh-TW', { hour: '2-digit', minute: '2-digit' }), W - P, 66);
   ctx.textAlign = 'left'; ctx.fillStyle = '#6b7580'; ctx.font = `400 26px ${font}`;
-  const ts = store.get('listTs', 0);
-  ctx.fillText(`共 ${items.length} 項・${items.reduce((s, i) => s + i.qty, 0)} 件` + (ts ? `・價格更新於 ${new Date(ts).toLocaleString('zh-TW', { month: 'numeric', day: 'numeric', hour: '2-digit', minute: '2-digit' })}` : ''), P, 162);
+  const nNo = items.filter(i => i.noSub).length;
+  ctx.fillText(`共 ${items.length} 項・${items.reduce((s, i) => s + i.qty, 0)} 件` + (nNo ? `・${nNo} 項請勿更換` : ''), P, 162);
 
   let y = headerH;
   ctx.fillStyle = '#f1f3f5'; ctx.fillRect(0, y, W, tableHead);
   ctx.fillStyle = '#495057'; ctx.font = `600 26px ${font}`;
   const mid = y + tableHead / 2;
   ctx.textAlign = 'left'; ctx.fillText('品名／編號', cols.name, mid);
+  ctx.textAlign = 'center'; ctx.fillText('備註', cols.note, mid);
   ctx.textAlign = 'right'; ctx.fillText('數量', cols.qty, mid); ctx.fillText('單價', cols.price, mid); ctx.fillText('小計', cols.sub, mid);
   y += tableHead;
 
@@ -267,11 +317,30 @@ function drawList() {
   rows.forEach((r, i) => {
     const it = r.it, sub = (it.price || 0) * it.qty; total += sub;
     if (i % 2) { ctx.fillStyle = '#fafbfc'; ctx.fillRect(0, y, W, r.h); }
+    // 縮圖（置中於列內，不改變列高）
+    const ty = y + (r.h - TH) / 2;
+    ctx.fillStyle = '#ffffff'; ctx.fillRect(cols.thumb, ty, TH, TH);
+    const im = thumbs[it.id];
+    if (im) {
+      const sc = Math.min(TH / im.width, TH / im.height), w = im.width * sc, h = im.height * sc;
+      ctx.drawImage(im, cols.thumb + (TH - w) / 2, ty + (TH - h) / 2, w, h);
+    }
+    ctx.strokeStyle = '#e3e7eb'; ctx.lineWidth = 2; ctx.strokeRect(cols.thumb, ty, TH, TH);
+
     ctx.textBaseline = 'top'; ctx.textAlign = 'left';
-    ctx.fillStyle = '#1d2329'; ctx.font = `600 32px ${font}`;
-    r.lines.forEach((ln, k) => ctx.fillText(ln, cols.name, y + 16 + k * 42));
+    ctx.fillStyle = '#1d2329'; ctx.font = `600 30px ${font}`;
+    r.lines.forEach((ln, k) => ctx.fillText(ln, cols.name, y + 16 + k * 40));
     ctx.fillStyle = '#868e96'; ctx.font = `400 24px ${font}`;
-    ctx.fillText(it.id + (it.unit ? `・${it.unit}入` : '') + (it.unavailable ? '・查無／下架' : ''), cols.name, y + 16 + r.lines.length * 42);
+    ctx.fillText(it.id + (it.unit ? `・${it.unit}入` : '') + (it.unavailable ? '・查無／下架' : ''), cols.name, y + 16 + r.lines.length * 40);
+
+    if (it.noSub) {
+      ctx.font = `700 26px ${font}`;
+      const tw = ctx.measureText('請勿更換').width + 20;
+      ctx.fillStyle = '#d6262d'; ctx.fillRect(cols.note - tw / 2, y + 12, tw, 40);
+      ctx.fillStyle = '#ffffff'; ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
+      ctx.fillText('請勿更換', cols.note, y + 32);
+      ctx.textBaseline = 'top';
+    }
     ctx.textAlign = 'right'; ctx.fillStyle = '#1d2329'; ctx.font = `700 32px ${font}`;
     ctx.fillText('× ' + it.qty, cols.qty, y + 16);
     ctx.font = `400 30px ${font}`; ctx.fillText(money(it.price), cols.price, y + 18);
@@ -288,8 +357,9 @@ function drawList() {
   return c;
 }
 let shotBlob = null;
-$('shot').onclick = () => {
-  const c = drawList();
+$('shot').onclick = async () => {
+  toast('產生截圖中…');
+  const c = await drawList();
   $('shotImg').src = c.toDataURL('image/png');
   c.toBlob(b => { shotBlob = b; }, 'image/png');
   $('dlgShot').showModal();
