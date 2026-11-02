@@ -20,6 +20,14 @@ header button.gear{background:none;border:0;color:#fff;font-size:20px;padding:0 
 .tabs button.on{color:var(--brand);border-color:var(--brand);font-weight:700}
 main{padding:12px 16px}
 .status{color:var(--muted);font-size:13px;margin:4px 0 10px}
+.tags{display:flex;gap:8px;margin-top:8px}
+.tags button{border:1.5px solid rgba(255,255,255,.85);background:rgba(255,255,255,.12);color:#fff;border-radius:16px;padding:5px 12px;font-size:14px;font-weight:700}
+.tags button.on{background:#fff;color:var(--brand)}
+.badge{color:#fff;font-size:12px;font-weight:800;border-radius:6px;padding:2px 7px;align-self:center}
+.badge.bogo{background:#d6262d}.badge.half{background:#7048e8}
+.hint{margin-top:5px;background:#fff4e6;color:#c2410c;border-radius:6px;padding:4px 8px;font-size:12.5px;font-weight:700}
+.hint.warn{background:#ffe3e3;color:#c92a2a}
+@media (prefers-color-scheme:dark){.hint{background:#3b2a1a;color:#ffc078}.hint.warn{background:#3b1f1f;color:#ff8787}}
 .notice{color:#d6262d;font-weight:700;font-size:15px;margin:2px 0 10px}
 .nosub{display:flex;align-items:center;gap:4px;font-size:13px;color:var(--text);white-space:nowrap;margin-left:auto}
 .nosub input{width:18px;height:18px;accent-color:#d6262d;margin:0}
@@ -68,6 +76,7 @@ dialog .btns button.primary{background:var(--brand);color:#fff}
     <input id="q" type="search" placeholder="搜尋商品，例如：泡麵、衛生紙" autocomplete="off">
     <button>搜尋</button>
   </form>
+  <div class="tags"><button type="button" data-tag="bogo">買一送一</button><button type="button" data-tag="half">第二件五折</button></div>
 </header>
 <nav class="tabs">
   <button id="tSearch" class="on">搜尋結果</button>
@@ -96,7 +105,7 @@ const store = {
   get(k, d) { try { const v = localStorage.getItem(k); return v ? JSON.parse(v) : d; } catch (e) { return d; } },
   set(k, v) { try { localStorage.setItem(k, JSON.stringify(v)); } catch (e) {} }
 };
-const gas = 'https://script.google.com/macros/s/AKfycbyB9bPki1EyERkVm0JDrDGFSeIVNJ00RZWQl22wyqOHbfCyi8noWKzNlUlpUIymcEm3/exec';
+const gas = 'https://script.google.com/macros/s/AKfycbwRcMUvFCVjWsDCPDBKFxInQMZ8_gBpTuOOYI4o6hLIa4nwev88GwTxwOFxE56v45mp/exec';
 let list = store.get('list', {});          // id -> {id,name,img,unit,url,price,prev,qty,ts}
 let results = [], resultInfo = '', tab = 'search', lastQ = '';
 const pendingNoSub = {};   // 尚未加入清單的商品，先記住「請勿更換」勾選
@@ -104,6 +113,26 @@ const pendingNoSub = {};   // 尚未加入清單的商品，先記住「請勿�
 const $ = id => document.getElementById(id);
 const money = n => '$' + (n == null ? '-' : Number(n).toLocaleString());
 const esc = s => String(s == null ? '' : s).replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
+const PROMO = { bogo: '買一送一', half: '第二件五折' };
+const halfOf = p => Math.round((p || 0) / 2);
+// 小計：買一送一 = 付一半件數；第二件五折 = 每 2 件其中 1 件半價
+function lineTotal(it) {
+  const p = it.price || 0, q = it.qty, pairs = Math.floor(q / 2), rem = q % 2;
+  if (it.promo === 'bogo') return (pairs + rem) * p;
+  if (it.promo === 'half') return pairs * (p + halfOf(p)) + rem * p;
+  return p * q;
+}
+function promoHint(it, inList) {
+  if (!it.promo) return '';
+  if (!inList) return `<div class="hint">${PROMO[it.promo]}：數量請下 2 的倍數</div>`;
+  const q = it.qty, pairs = Math.floor(q / 2);
+  if (q % 2) return it.promo === 'bogo'
+    ? `<div class="hint warn">⚠ 目前 ${q} 件，再加 1 件可多送 1 件</div>`
+    : `<div class="hint warn">⚠ 目前 ${q} 件，再加 1 件第 ${q + 1} 件只要 ${money(halfOf(it.price))}</div>`;
+  return it.promo === 'bogo'
+    ? `<div class="hint">✓ ${q} 件（付 ${pairs} 件，送 ${pairs} 件）</div>`
+    : `<div class="hint">✓ ${q} 件（${pairs} 件半價，共 ${money(lineTotal(it))}）</div>`;
+}
 function toast(t) { const el = $('toast'); el.textContent = t; el.classList.add('show'); clearTimeout(el._t); el._t = setTimeout(() => el.classList.remove('show'), 1800); }
 function save() { store.set('list', list); renderBar(); }
 
@@ -119,16 +148,33 @@ $('sf').onsubmit = async e => {
   e.preventDefault();
   const q = $('q').value.trim(); if (!q) return;
   lastQ = q; setTab('search');
+  document.querySelectorAll('.tags button').forEach(b => b.classList.remove('on'));
   resultInfo = '搜尋中…'; results = []; render();
   try {
     const j = await api({ action: 'search', q, pages: 2 });
     results = j.items;
     resultInfo = j.count ? '' : `找不到「${esc(q)}」相關商品`;
-    results.forEach(it => { if (list[it.id]) updateFromFresh(list[it.id], it.price); });
+    results.forEach(it => { if (list[it.id]) { list[it.id].promo = it.promo || ''; updateFromFresh(list[it.id], it.price); } });
     save();
   } catch (err) { resultInfo = '⚠ ' + esc(err.message); }
   render();
 };
+
+async function browsePromo(type) {
+  setTab('search');
+  document.querySelectorAll('.tags button').forEach(b => b.classList.toggle('on', b.dataset.tag === type));
+  $('q').value = '';
+  resultInfo = `${PROMO[type]}商品載入中…（第一次會比較久）`; results = []; render();
+  try {
+    const j = await api({ action: 'promo', type });
+    results = j.items;
+    resultInfo = j.count ? `${PROMO[type]}商品共 ${j.count} 項` : `目前沒有${PROMO[type]}商品`;
+    results.forEach(it => { if (list[it.id]) { list[it.id].promo = it.promo; updateFromFresh(list[it.id], it.price); } });
+    save();
+  } catch (err) { resultInfo = '⚠ ' + esc(err.message); }
+  render();
+}
+document.querySelectorAll('.tags button').forEach(b => b.onclick = () => browsePromo(b.dataset.tag));
 
 function updateFromFresh(item, price) {
   if (price == null) return;
@@ -147,6 +193,7 @@ async function refreshPrices(silent) {
       const p = j.prices[id]; if (!p) return;
       if (!p.available) { list[id].unavailable = true; gone++; return; }
       list[id].unavailable = false;
+      if (p.promo != null) list[id].promo = p.promo;
       const before = list[id].price; updateFromFresh(list[id], p.price);
       if (before !== list[id].price) changed++;
     });
@@ -158,7 +205,7 @@ async function refreshPrices(silent) {
 /* 清單操作 */
 function addItem(it, qty) {
   if (list[it.id]) list[it.id].qty += qty;
-  else list[it.id] = { id: it.id, name: it.name, img: it.img, unit: it.unit, url: it.url, price: it.price, prev: null, qty, ts: Date.now(), noSub: !!pendingNoSub[it.id] };
+  else list[it.id] = { id: it.id, name: it.name, img: it.img, unit: it.unit, url: it.url, price: it.price, prev: null, qty, ts: Date.now(), noSub: !!pendingNoSub[it.id], promo: it.promo || '' };
   save(); render(); toast('已加入清單');
 }
 function setQty(id, q) { if (!list[id]) return; list[id].qty = Math.max(1, Math.min(99, q | 0 || 1)); save(); render(); }
@@ -183,13 +230,14 @@ function card(it, inList) {
   const box = `<label class="nosub ${ns ? 'on' : ''}"><input type="checkbox" data-a="nosub" data-id="${it.id}" ${ns ? 'checked' : ''}>請勿更換</label>`;
   const right = inList
     ? `${qtyBox(it.id, it.qty)}${box}<button class="del" data-a="del" data-id="${it.id}">移除</button>`
-    : `${qtyBox(it.id, 1)}${box}<button class="add ${list[it.id] ? 'in' : ''}" data-a="add" data-id="${it.id}">${list[it.id] ? '再加' : '加入'}</button>`;
+    : `${qtyBox(it.id, it.promo ? 2 : 1)}${box}<button class="add ${list[it.id] ? 'in' : ''}" data-a="add" data-id="${it.id}">${list[it.id] ? '再加' : '加入'}</button>`;
   return `<div class="item">
     <img src="${esc(it.img)}" alt="" loading="lazy" onerror="this.style.visibility='hidden'">
     <div class="info">
       <a class="name" href="${esc(it.url)}" target="_blank" rel="noopener" style="color:inherit;text-decoration:none">${esc(it.name)}</a>
       <div class="meta">${it.unit ? esc(it.unit) + '入・' : ''}${esc(it.id)}${it.unavailable ? '・<b style="color:var(--up)">查無／下架</b>' : ''}</div>
-      <div class="price"><b>${money(it.price)}</b>${it.list ? `<s>${money(it.list)}</s>` : ''}${chg}</div>
+      <div class="price"><b>${money(it.price)}</b>${it.list ? `<s>${money(it.list)}</s>` : ''}${it.promo ? `<span class="badge ${it.promo}">${PROMO[it.promo]}</span>` : ''}${chg}</div>
+      ${promoHint(inList ? it : it, inList)}
       <div class="row">${right}</div>
     </div></div>`;
 }
@@ -212,7 +260,7 @@ function renderBar() {
   const items = Object.values(list);
   $('bItems').textContent = items.length;
   $('bQty').textContent = items.reduce((s, i) => s + i.qty, 0);
-  $('bTotal').textContent = money(items.reduce((s, i) => s + (i.price || 0) * i.qty, 0));
+  $('bTotal').textContent = money(items.reduce((s, i) => s + lineTotal(i), 0));
   $('shot').disabled = !items.length;
 }
 
@@ -282,7 +330,7 @@ async function drawList() {
   const thumbs = await loadThumbs(items);
   const W = 1200, P = 48, TH = 76;
   const font = '"PingFang TC","Noto Sans TC","Microsoft JhengHei",sans-serif';
-  const cols = { thumb: P, name: P + TH + 18, note: 770, qty: 900, price: 1030, sub: W - P };
+  const cols = { thumb: P, name: P + TH + 18, note: 760, qty: 900, price: 1030, sub: W - P };
   const c = document.createElement('canvas'), ctx = c.getContext('2d');
   const rows = items.map(it => {
     ctx.font = `600 30px ${font}`;
@@ -315,7 +363,7 @@ async function drawList() {
 
   let total = 0;
   rows.forEach((r, i) => {
-    const it = r.it, sub = (it.price || 0) * it.qty; total += sub;
+    const it = r.it, sub = lineTotal(it); total += sub;
     if (i % 2) { ctx.fillStyle = '#fafbfc'; ctx.fillRect(0, y, W, r.h); }
     // 縮圖（置中於列內，不改變列高）
     const ty = y + (r.h - TH) / 2;
@@ -333,16 +381,24 @@ async function drawList() {
     ctx.fillStyle = '#868e96'; ctx.font = `400 24px ${font}`;
     ctx.fillText(it.id + (it.unit ? `・${it.unit}入` : '') + (it.unavailable ? '・查無／下架' : ''), cols.name, y + 16 + r.lines.length * 40);
 
-    if (it.noSub) {
-      ctx.font = `700 26px ${font}`;
-      const tw = ctx.measureText('請勿更換').width + 20;
-      ctx.fillStyle = '#d6262d'; ctx.fillRect(cols.note - tw / 2, y + 12, tw, 40);
-      ctx.fillStyle = '#ffffff'; ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
-      ctx.fillText('請勿更換', cols.note, y + 32);
-      ctx.textBaseline = 'top';
-    }
+    // 備註：促銷 + 請勿更換，最多兩個標籤上下疊
+    const chips = [];
+    if (it.promo) chips.push([PROMO[it.promo], it.promo === 'bogo' ? '#f08c00' : '#7048e8']);
+    if (it.noSub) chips.push(['請勿更換', '#d6262d']);
+    ctx.font = `700 24px ${font}`; ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
+    chips.forEach(([t, col], k) => {
+      const tw = ctx.measureText(t).width + 18, cy = y + 12 + k * 42;
+      ctx.fillStyle = col; ctx.fillRect(cols.note - tw / 2, cy, tw, 36);
+      ctx.fillStyle = '#ffffff'; ctx.fillText(t, cols.note, cy + 18);
+    });
+    ctx.textBaseline = 'top';
     ctx.textAlign = 'right'; ctx.fillStyle = '#1d2329'; ctx.font = `700 32px ${font}`;
     ctx.fillText('× ' + it.qty, cols.qty, y + 16);
+    if (it.promo && it.qty >= 2) {
+      ctx.fillStyle = '#868e96'; ctx.font = `400 22px ${font}`;
+      ctx.fillText(it.promo === 'bogo' ? `含送 ${Math.floor(it.qty / 2)}` : `${Math.floor(it.qty / 2)} 件半價`, cols.qty, y + 58);
+      ctx.fillStyle = '#1d2329';
+    }
     ctx.font = `400 30px ${font}`; ctx.fillText(money(it.price), cols.price, y + 18);
     ctx.font = `700 32px ${font}`; ctx.fillStyle = '#d6262d'; ctx.fillText(money(sub), cols.sub, y + 16);
     y += r.h;
