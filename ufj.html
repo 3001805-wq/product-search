@@ -88,6 +88,11 @@ dialog .btns button.primary{background:var(--brand);color:#fff}
   <button id="shot" disabled>截圖購物車列表</button>
 </div>
 <div class="toast" id="toast"></div>
+<div id="saveView" style="display:none;position:fixed;inset:0;z-index:20;background:rgba(0,0,0,.92);overflow:auto;padding:16px">
+  <div style="color:#fff;font-weight:700;font-size:16px;text-align:center;margin:8px 0 12px">👆 長按圖片 →「儲存到照片」</div>
+  <img id="saveImg" alt="購物車列表" style="width:100%;display:block;border-radius:8px;-webkit-touch-callout:default">
+  <button id="saveClose" style="display:block;margin:16px auto 24px;border:0;border-radius:10px;padding:12px 28px;font-size:16px;font-weight:700;background:#fff;color:#1d2329">關閉</button>
+</div>
 
 
 
@@ -95,7 +100,7 @@ dialog .btns button.primary{background:var(--brand);color:#fff}
   <h2>購物車列表截圖</h2>
   <p style="font-size:13px;color:var(--muted);margin:0 0 8px">按「分享到 LINE」後，在分享選單選 LINE 即可傳送；也可長按圖片儲存</p>
   <div style="max-height:60vh;overflow:auto;border:1px solid var(--line);border-radius:8px"><img id="shotImg" alt="購物車列表" style="width:100%;display:block"></div>
-  <div class="btns"><button onclick="dlgShot.close()">關閉</button><button id="dlShot">下載圖片</button><button class="primary" id="shareShot" style="background:#06c755">分享到 LINE</button></div>
+  <div class="btns"><button onclick="dlgShot.close()">關閉</button><button id="dlShot">儲存圖片</button><button class="primary" id="shareShot" style="background:#06c755">分享到 LINE</button></div>
 </dialog>
 
 <script>
@@ -417,16 +422,38 @@ $('shot').onclick = async () => {
   toast('產生截圖中…');
   const c = await drawList();
   $('shotImg').src = c.toDataURL('image/png');
-  c.toBlob(b => { shotBlob = b; }, 'image/png');
+  shotBlob = await new Promise(r => c.toBlob(r, 'image/png'));
   $('dlgShot').showModal();
 };
 const shotName = () => '萬家福購物車_' + new Date().toISOString().slice(0, 10) + '.png';
-$('dlShot').onclick = () => { const a = document.createElement('a'); a.href = $('shotImg').src; a.download = shotName(); a.click(); };
+const isMobile = /iPhone|iPad|iPod|Android|Line\//i.test(navigator.userAgent) || (navigator.platform === 'MacIntel' && navigator.maxTouchPoints > 1);
+function showSaveView() {
+  $('saveImg').src = $('shotImg').src;
+  $('dlgShot').close();
+  $('saveView').style.display = 'block';
+}
+$('saveClose').onclick = () => { $('saveView').style.display = 'none'; };
+$('dlShot').onclick = async () => {
+  if (isMobile) {
+    // 手機：優先叫出系統分享選單（裡面有「儲存影像」），不支援就顯示大圖讓使用者長按儲存
+    try {
+      const f = new File([shotBlob], shotName(), { type: 'image/png' });
+      if (navigator.canShare && navigator.canShare({ files: [f] })) { await navigator.share({ files: [f] }); return; }
+    } catch (e) { if (e.name === 'AbortError') return; }
+    showSaveView();
+    return;
+  }
+  // 電腦：直接下載
+  const url = URL.createObjectURL(shotBlob);
+  const a = document.createElement('a'); a.href = url; a.download = shotName();
+  document.body.appendChild(a); a.click(); a.remove();
+  setTimeout(() => URL.revokeObjectURL(url), 3000);
+};
 $('shareShot').onclick = async () => {
   try {
     const f = new File([shotBlob], shotName(), { type: 'image/png' });
     if (navigator.canShare && navigator.canShare({ files: [f] })) await navigator.share({ files: [f], title: '萬家福行動商店購物車' });
-    else { $('dlShot').click(); toast('這個瀏覽器不支援分享，已改為下載'); }
+    else { showSaveView(); toast('這個瀏覽器不支援直接分享，請長按圖片儲存後再傳 LINE'); }
   } catch (e) { if (e.name !== 'AbortError') toast('分享失敗，請長按圖片儲存'); }
 };
 
