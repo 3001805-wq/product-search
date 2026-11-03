@@ -28,6 +28,11 @@ main{padding:12px 16px}
 .hint{margin-top:5px;background:#fff4e6;color:#c2410c;border-radius:6px;padding:4px 8px;font-size:12.5px;font-weight:700}
 .hint.warn{background:#ffe3e3;color:#c92a2a}
 @media (prefers-color-scheme:dark){.hint{background:#3b2a1a;color:#ffc078}.hint.warn{background:#3b1f1f;color:#ff8787}}
+.cust{display:flex;align-items:center;gap:8px;background:var(--card);border-bottom:1px solid var(--line);padding:8px 16px;font-size:13px;color:var(--muted)}
+.cust b{color:var(--text)}.cust span{flex:1;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.cust button{border:1px solid var(--line);background:var(--bg);color:var(--text);border-radius:8px;padding:4px 10px;font-size:13px;flex:none}
+#dlgCust input{font-size:16px}
+#dlgCust .err{color:#d6262d;font-size:13px;min-height:18px;margin-top:6px}
 .notice{color:#d6262d;font-weight:700;font-size:15px;margin:2px 0 10px}
 .nosub{display:flex;align-items:center;gap:4px;font-size:13px;color:var(--text);white-space:nowrap;margin-left:auto}
 .nosub input{width:18px;height:18px;accent-color:#d6262d;margin:0}
@@ -82,12 +87,25 @@ dialog .btns button.primary{background:var(--brand);color:#fff}
   <button id="tSearch" class="on">搜尋結果</button>
   <button id="tList">採購清單 <span id="cnt"></span></button>
 </nav>
+<div class="cust" id="custBar"></div>
 <main id="main"></main>
 <div class="bar">
   <div class="sum">清單 <span id="bItems">0</span> 項・<span id="bQty">0</span> 件<b id="bTotal">$0</b></div>
   <button id="shot" disabled>截圖購物車列表</button>
 </div>
 <div class="toast" id="toast"></div>
+<dialog id="dlgCust">
+  <h2>訂購人資料</h2>
+  <p style="font-size:13px;color:var(--muted);margin:0">填一次就會記住，下次打開不用重填</p>
+  <label>姓名</label>
+  <input id="cName" autocomplete="name" placeholder="例如：王小明">
+  <label>取貨地點（社區或公司行號名稱）</label>
+  <input id="cPlace" placeholder="例如：觀星台北社區、統祥公司">
+  <label>聯絡電話</label>
+  <input id="cPhone" type="tel" inputmode="tel" autocomplete="tel" placeholder="例如：0912345678">
+  <div class="err" id="cErr"></div>
+  <div class="btns"><button class="primary" id="cSave" style="width:100%;padding:12px;font-size:16px">開始購物</button></div>
+</dialog>
 <div id="saveView" style="display:none;position:fixed;inset:0;z-index:20;background:rgba(0,0,0,.92);overflow:auto;padding:16px">
   <div style="color:#fff;font-weight:700;font-size:16px;text-align:center;margin:8px 0 12px">👆 長按圖片 →「儲存到照片」</div>
   <img id="saveImg" alt="購物車列表" style="width:100%;display:block;border-radius:8px;-webkit-touch-callout:default">
@@ -287,6 +305,32 @@ $('main').addEventListener('change', e => {
   if (t.dataset.a === 'nosub') setNoSub(t.dataset.id, t.checked);
 });
 
+/* 訂購人資料（記在這支手機的瀏覽器裡） */
+let cust = store.get('cust', null);
+function renderCust() {
+  $('custBar').innerHTML = cust
+    ? `<span>訂購人：<b>${esc(cust.name)}</b>・${esc(cust.place)}・${esc(cust.phone)}</span><button id="cEdit">修改</button>`
+    : `<span>尚未填寫訂購人資料</span><button id="cEdit">填寫</button>`;
+  $('cEdit').onclick = openCust;
+}
+function openCust() {
+  $('cName').value = cust ? cust.name : ''; $('cPlace').value = cust ? cust.place : ''; $('cPhone').value = cust ? cust.phone : '';
+  $('cErr').textContent = '';
+  $('dlgCust').showModal();
+}
+$('dlgCust').addEventListener('cancel', e => { if (!cust) e.preventDefault(); });   // 第一次一定要填
+$('cSave').onclick = () => {
+  const name = $('cName').value.trim(), place = $('cPlace').value.trim();
+  const phone = $('cPhone').value.replace(/[^\d+#-]/g, '');
+  if (!name) return $('cErr').textContent = '請填寫姓名';
+  if (!place) return $('cErr').textContent = '請填寫取貨地點（社區或公司行號名稱）';
+  if (phone.replace(/\D/g, '').length < 8) return $('cErr').textContent = '請填寫正確的聯絡電話';
+  cust = { name, place, phone }; store.set('cust', cust);
+  $('dlgCust').close(); renderCust(); toast('已記住訂購人資料');
+};
+renderCust();
+if (!cust) setTimeout(openCust, 200);
+
 /* 截圖購物車列表 */
 function wrapLines(ctx, text, maxW) {
   const out = []; let line = '';
@@ -342,7 +386,7 @@ async function drawList() {
     const lines = wrapLines(ctx, it.name, cols.note - 70 - cols.name);
     return { it, lines, h: Math.max(lines.length * 40 + 52, 104) };
   });
-  const headerH = 190, tableHead = 64, footH = 150;
+  const headerH = 300, tableHead = 64, footH = 150;
   const H = headerH + tableHead + rows.reduce((s, r) => s + r.h, 0) + footH;
   c.width = W; c.height = H;
 
@@ -353,9 +397,21 @@ async function drawList() {
   ctx.font = `400 28px ${font}`; ctx.textAlign = 'right';
   const now = new Date();
   ctx.fillText(now.toLocaleDateString('zh-TW') + ' ' + now.toLocaleTimeString('zh-TW', { hour: '2-digit', minute: '2-digit' }), W - P, 66);
+  // 訂購人資料
+  ctx.fillStyle = '#fff4e6'; ctx.fillRect(0, 130, W, 120);
+  ctx.textAlign = 'left'; ctx.fillStyle = '#1d2329';
+  const kv = (k, v, x, yy) => {
+    ctx.font = `400 28px ${font}`; ctx.fillStyle = '#6b7580'; ctx.fillText(k, x, yy);
+    const kw = ctx.measureText(k).width;
+    ctx.font = `700 30px ${font}`; ctx.fillStyle = '#1d2329'; ctx.fillText(v, x + kw, yy);
+  };
+  const c0 = cust || { name: '', place: '', phone: '' };
+  kv('姓名：', c0.name, P, 168);
+  kv('電話：', c0.phone, 640, 168);
+  kv('取貨地點：', c0.place, P, 216);
   ctx.textAlign = 'left'; ctx.fillStyle = '#6b7580'; ctx.font = `400 26px ${font}`;
   const nNo = items.filter(i => i.noSub).length;
-  ctx.fillText(`共 ${items.length} 項・${items.reduce((s, i) => s + i.qty, 0)} 件` + (nNo ? `・${nNo} 項請勿更換` : ''), P, 162);
+  ctx.fillText(`共 ${items.length} 項・${items.reduce((s, i) => s + i.qty, 0)} 件` + (nNo ? `・${nNo} 項請勿更換` : ''), P, 275);
 
   let y = headerH;
   ctx.fillStyle = '#f1f3f5'; ctx.fillRect(0, y, W, tableHead);
@@ -419,6 +475,7 @@ async function drawList() {
 }
 let shotBlob = null;
 $('shot').onclick = async () => {
+  if (!cust) { openCust(); return; }
   toast('產生截圖中…');
   const c = await drawList();
   $('shotImg').src = c.toDataURL('image/png');
