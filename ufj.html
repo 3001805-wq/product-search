@@ -81,7 +81,7 @@ dialog .btns button.primary{background:var(--brand);color:#fff}
     <input id="q" type="search" placeholder="搜尋商品，例如：泡麵、衛生紙" autocomplete="off">
     <button>搜尋</button>
   </form>
-  <div class="tags"><button type="button" data-tag="bogo">買一送一</button><button type="button" data-tag="half">第二件五折</button><button type="button" data-q="火鍋">火鍋</button><button type="button" data-q="暖暖">暖暖</button></div>
+  <div class="tags"><button type="button" data-tag="bogo">買一送一</button><button type="button" data-tag="half">第二件五折</button><button type="button" data-q="火鍋" data-more="火鍋料,湯底,沙茶,貢丸,魚丸,燕餃,蛋餃,鍋燒">火鍋</button><button type="button" data-q="暖暖">暖暖</button></div>
 </header>
 <nav class="tabs">
   <button id="tSearch" class="on">搜尋結果</button>
@@ -174,9 +174,21 @@ $('sf').onsubmit = async e => {
   document.querySelectorAll('.tags button').forEach(b => b.classList.toggle('on', b.dataset.q === q));
   resultInfo = '搜尋中…'; results = []; render();
   try {
-    const j = await api({ action: 'search', q, pages: 4 });
-    results = j.items;
-    resultInfo = j.count ? '' : `找不到「${esc(q)}」相關商品`;
+    const tag = [...document.querySelectorAll('.tags button')].find(b => b.dataset.q === q && b.dataset.more);
+    if (tag) {
+      // 類別標籤：同時搜好幾個關鍵字，合併後最多顯示 100 項
+      const words = [q].concat(tag.dataset.more.split(','));
+      const all = await Promise.all(words.map(w => api({ action: 'search', q: w, pages: 2 }).catch(() => ({ items: [] }))));
+      const seen = {};
+      results = [];
+      all.forEach(j => (j.items || []).forEach(it => { if (!seen[it.id]) { seen[it.id] = 1; results.push(it); } }));
+      results = results.slice(0, 100);
+      resultInfo = results.length ? `${esc(q)}類商品共 ${results.length} 項` : `找不到「${esc(q)}」相關商品`;
+    } else {
+      const j = await api({ action: 'search', q, pages: 2 });
+      results = j.items;
+      resultInfo = j.count ? '' : `找不到「${esc(q)}」相關商品`;
+    }
     results.forEach(it => { if (list[it.id]) { list[it.id].promo = it.promo || ''; updateFromFresh(list[it.id], it.price); } });
     save();
   } catch (err) { resultInfo = '⚠ ' + esc(err.message); }
