@@ -20,7 +20,7 @@ header button.gear{background:none;border:0;color:#fff;font-size:20px;padding:0 
 .tabs button.on{color:var(--brand);border-color:var(--brand);font-weight:700}
 main{padding:12px 16px}
 .status{color:var(--muted);font-size:13px;margin:4px 0 10px}
-.tags{display:flex;gap:8px;margin-top:8px}
+.tags{display:flex;gap:8px;margin-top:8px;flex-wrap:wrap}
 .tags button{border:1.5px solid rgba(255,255,255,.85);background:rgba(255,255,255,.12);color:#fff;border-radius:16px;padding:5px 12px;font-size:14px;font-weight:700}
 .tags button.on{background:#fff;color:var(--brand)}
 .badge{color:#fff;font-size:12px;font-weight:800;border-radius:6px;padding:2px 7px;align-self:center}
@@ -81,7 +81,7 @@ dialog .btns button.primary{background:var(--brand);color:#fff}
     <input id="q" type="search" placeholder="搜尋商品，例如：泡麵、衛生紙" autocomplete="off">
     <button>搜尋</button>
   </form>
-  <div class="tags"><button type="button" data-tag="bogo">買一送一</button><button type="button" data-tag="half">第二件五折</button></div>
+  <div class="tags"><button type="button" data-tag="bogo">買一送一</button><button type="button" data-tag="half">第二件五折</button><button type="button" data-q="火鍋">火鍋</button><button type="button" data-q="暖暖">暖暖</button></div>
 </header>
 <nav class="tabs">
   <button id="tSearch" class="on">搜尋結果</button>
@@ -171,10 +171,10 @@ $('sf').onsubmit = async e => {
   e.preventDefault();
   const q = $('q').value.trim(); if (!q) return;
   lastQ = q; setTab('search');
-  document.querySelectorAll('.tags button').forEach(b => b.classList.remove('on'));
+  document.querySelectorAll('.tags button').forEach(b => b.classList.toggle('on', b.dataset.q === q));
   resultInfo = '搜尋中…'; results = []; render();
   try {
-    const j = await api({ action: 'search', q, pages: 2 });
+    const j = await api({ action: 'search', q, pages: 4 });
     results = j.items;
     resultInfo = j.count ? '' : `找不到「${esc(q)}」相關商品`;
     results.forEach(it => { if (list[it.id]) { list[it.id].promo = it.promo || ''; updateFromFresh(list[it.id], it.price); } });
@@ -197,7 +197,10 @@ async function browsePromo(type) {
   } catch (err) { resultInfo = '⚠ ' + esc(err.message); }
   render();
 }
-document.querySelectorAll('.tags button').forEach(b => b.onclick = () => browsePromo(b.dataset.tag));
+document.querySelectorAll('.tags button').forEach(b => b.onclick = () => {
+  if (b.dataset.q) { $('q').value = b.dataset.q; $('sf').requestSubmit ? $('sf').requestSubmit() : $('sf').onsubmit(new Event('submit')); }
+  else browsePromo(b.dataset.tag);
+});
 
 function updateFromFresh(item, price) {
   if (price == null) return;
