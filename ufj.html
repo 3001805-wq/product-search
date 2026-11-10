@@ -178,14 +178,14 @@ $('sf').onsubmit = async e => {
     if (tag) {
       // 類別標籤：同時搜好幾個關鍵字，合併後最多顯示 100 項
       const words = [q].concat(tag.dataset.more.split(','));
-      const all = await Promise.all(words.map(w => api({ action: 'search', q: w, pages: 2 }).catch(() => ({ items: [] }))));
+      const all = await Promise.all(words.map(w => api({ action: 'search', q: w, pages: 4 }).catch(() => ({ items: [] }))));
       const seen = {};
       results = [];
       all.forEach(j => (j.items || []).forEach(it => { if (!seen[it.id]) { seen[it.id] = 1; results.push(it); } }));
       results = results.slice(0, 100);
       resultInfo = results.length ? `${esc(q)}類商品共 ${results.length} 項` : `找不到「${esc(q)}」相關商品`;
     } else {
-      const j = await api({ action: 'search', q, pages: 2 });
+      const j = await api({ action: 'search', q, pages: 4 });
       results = j.items;
       resultInfo = j.count ? '' : `找不到「${esc(q)}」相關商品`;
     }
