@@ -20,7 +20,7 @@ header button.gear{background:none;border:0;color:#fff;font-size:20px;padding:0 
 .tabs button.on{color:var(--brand);border-color:var(--brand);font-weight:700}
 main{padding:12px 16px}
 .status{color:var(--muted);font-size:13px;margin:4px 0 10px}
-.tags{display:flex;gap:8px;margin-top:8px;flex-wrap:wrap}
+.tags{display:flex;gap:8px;margin-top:8px;flex-wrap:nowrap;overflow-x:auto;-webkit-overflow-scrolling:touch;scrollbar-width:none}.tags::-webkit-scrollbar{display:none}.tags button{flex:none;white-space:nowrap}
 .tags button{border:1.5px solid rgba(255,255,255,.85);background:rgba(255,255,255,.12);color:#fff;border-radius:16px;padding:5px 12px;font-size:14px;font-weight:700}
 .tags button.on{background:#fff;color:var(--brand)}
 .badge{color:#fff;font-size:12px;font-weight:800;border-radius:6px;padding:2px 7px;align-self:center}
@@ -81,7 +81,7 @@ dialog .btns button.primary{background:var(--brand);color:#fff}
     <input id="q" type="search" placeholder="搜尋商品，例如：泡麵、衛生紙" autocomplete="off">
     <button>搜尋</button>
   </form>
-  <div class="tags"><button type="button" data-tag="bogo">買一送一</button><button type="button" data-tag="half">第二件五折</button><button type="button" data-q="火鍋" data-more="火鍋料,湯底,沙茶,貢丸,魚丸,燕餃,蛋餃,鍋燒">火鍋</button><button type="button" data-q="暖暖">暖暖</button></div>
+  <div class="tags"><button type="button" data-tag="bogo">買一送一</button><button type="button" data-tag="half">第二件五折</button><button type="button" data-q="火鍋" data-more="火鍋料,湯底,沙茶,貢丸,魚丸,燕餃,蛋餃,鍋燒">火鍋</button><button type="button" data-q="暖暖">暖暖</button><button type="button" data-q="暖暖包">暖暖包</button><button type="button" data-q="暖爐">暖爐</button></div>
 </header>
 <nav class="tabs">
   <button id="tSearch" class="on">搜尋結果</button>
@@ -166,7 +166,29 @@ async function api(params) {
   return j;
 }
 
-/* 搜尋 */
+/* 搜尋（加速：同一個詞 20 分鐘內直接用手機裡的結果；打字停下來就先開始查） */
+const SEARCH_TTL = 20 * 60 * 1000;
+const pendingSearch = {};
+function searchCached(q) {
+  const key = 'sr:' + q;
+  try {
+    const hit = JSON.parse(sessionStorage.getItem(key) || 'null');
+    if (hit && Date.now() - hit.t < SEARCH_TTL) return Promise.resolve(hit.j);
+  } catch (e) {}
+  if (pendingSearch[q]) return pendingSearch[q];
+  pendingSearch[q] = api({ action: 'search', q, pages: 4 }).then(j => {
+    try { sessionStorage.setItem(key, JSON.stringify({ t: Date.now(), j })); } catch (e) {}
+    return j;
+  }).finally(() => { delete pendingSearch[q]; });
+  return pendingSearch[q];
+}
+let typeTimer = null;
+$('q').addEventListener('input', () => {
+  clearTimeout(typeTimer);
+  const q = $('q').value.trim();
+  if (q.length >= 2) typeTimer = setTimeout(() => searchCached(q).catch(() => {}), 700);
+});
+
 $('sf').onsubmit = async e => {
   e.preventDefault();
   const q = $('q').value.trim(); if (!q) return;
@@ -178,14 +200,14 @@ $('sf').onsubmit = async e => {
     if (tag) {
       // 類別標籤：同時搜好幾個關鍵字，合併後最多顯示 100 項
       const words = [q].concat(tag.dataset.more.split(','));
-      const all = await Promise.all(words.map(w => api({ action: 'search', q: w, pages: 4 }).catch(() => ({ items: [] }))));
+      const all = await Promise.all(words.map(w => searchCached(w).catch(() => ({ items: [] }))));
       const seen = {};
       results = [];
       all.forEach(j => (j.items || []).forEach(it => { if (!seen[it.id]) { seen[it.id] = 1; results.push(it); } }));
       results = results.slice(0, 100);
       resultInfo = results.length ? `${esc(q)}類商品共 ${results.length} 項` : `找不到「${esc(q)}」相關商品`;
     } else {
-      const j = await api({ action: 'search', q, pages: 4 });
+      const j = await searchCached(q);
       results = j.items;
       resultInfo = j.count ? '' : `找不到「${esc(q)}」相關商品`;
     }
