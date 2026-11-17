@@ -15,7 +15,10 @@ header button.gear{background:none;border:0;color:#fff;font-size:20px;padding:0 
 .searchbar{display:flex;gap:8px}
 .searchbar input{flex:1;min-width:0;border:0;border-radius:10px;padding:10px 12px;font-size:16px}
 .searchbar button{border:0;border-radius:10px;padding:0 16px;background:#fff;color:var(--brand);font-weight:700;font-size:15px}
-.tabs{display:flex;background:var(--card);border-bottom:1px solid var(--line)}
+.tabs{display:flex;background:var(--card);border-bottom:1px solid var(--line);position:sticky;top:var(--hh,120px);z-index:4}
+.fab{position:fixed;right:14px;bottom:calc(78px + env(safe-area-inset-bottom));z-index:6;border:0;border-radius:24px;padding:10px 16px;font-size:14px;font-weight:700;color:#fff;background:rgba(32,33,36,.82);box-shadow:0 4px 14px rgba(0,0,0,.25);display:none}
+.fab.show{display:block}
+.rfilter{width:100%;box-sizing:border-box;border:1px solid var(--line);border-radius:10px;padding:10px 12px;font-size:15px;margin:2px 0 10px;background:var(--card);color:inherit}
 .tabs button{flex:1;border:0;background:none;padding:11px 0;font-size:15px;color:var(--muted);border-bottom:3px solid transparent}
 .tabs button.on{color:var(--brand);border-color:var(--brand);font-weight:700}
 main{padding:12px 16px}
@@ -81,7 +84,7 @@ dialog .btns button.primary{background:var(--brand);color:#fff}
     <input id="q" type="search" placeholder="搜尋商品，例如：泡麵、衛生紙" autocomplete="off">
     <button>搜尋</button>
   </form>
-  <div class="tags"><button type="button" data-tag="bogo">買一送一</button><button type="button" data-tag="half">第二件五折</button><button type="button" data-q="火鍋" data-more="火鍋料,湯底,沙茶,貢丸,魚丸,燕餃,蛋餃,鍋燒">火鍋</button><button type="button" data-q="暖暖包">暖暖包</button><button type="button" data-q="暖爐">暖爐</button></div>
+  <div class="tags"><button type="button" data-tag="bogo">買一送一</button><button type="button" data-tag="half">第二件五折</button><span id="hotTags"></span></div>
 </header>
 <nav class="tabs">
   <button id="tSearch" class="on">搜尋結果</button>
@@ -93,6 +96,7 @@ dialog .btns button.primary{background:var(--brand);color:#fff}
   <div class="sum">清單 <span id="bItems">0</span> 項・<span id="bQty">0</span> 件<b id="bTotal">$0</b></div>
   <button id="shot" disabled>截圖購物車列表</button>
 </div>
+<button class="fab" id="fab" type="button">⬆ 回頂部</button>
 <div class="toast" id="toast"></div>
 <dialog id="dlgCust">
   <h2>訂購人資料</h2>
@@ -194,7 +198,7 @@ $('sf').onsubmit = async e => {
   const q = $('q').value.trim(); if (!q) return;
   lastQ = q; setTab('search');
   document.querySelectorAll('.tags button').forEach(b => b.classList.toggle('on', b.dataset.q === q));
-  resultInfo = '搜尋中…'; results = []; render();
+  resultInfo = '搜尋中…'; results = []; rFilter = ''; render();
   try {
     const tag = [...document.querySelectorAll('.tags button')].find(b => b.dataset.q === q && b.dataset.more);
     if (tag) {
@@ -221,7 +225,7 @@ async function browsePromo(type) {
   setTab('search');
   document.querySelectorAll('.tags button').forEach(b => b.classList.toggle('on', b.dataset.tag === type));
   $('q').value = '';
-  resultInfo = `${PROMO[type]}商品載入中…（第一次會比較久）`; results = []; render();
+  resultInfo = `${PROMO[type]}商品載入中…（第一次會比較久）`; results = []; rFilter = ''; render(); window.scrollTo(0, 0);
   try {
     const j = await api({ action: 'promo', type });
     results = j.items;
@@ -231,10 +235,27 @@ async function browsePromo(type) {
   } catch (err) { resultInfo = '⚠ ' + esc(err.message); }
   render();
 }
-document.querySelectorAll('.tags button').forEach(b => b.onclick = () => {
+// 標籤：買一送一、第二件五折固定；其他是萬家福每週熱門關鍵字（Apps Script 自動更新）
+$('hotTags').style.display = 'contents';
+document.querySelector('.tags').addEventListener('click', e => {
+  const b = e.target.closest('button'); if (!b) return;
   if (b.dataset.q) { $('q').value = b.dataset.q; $('sf').requestSubmit ? $('sf').requestSubmit() : $('sf').onsubmit(new Event('submit')); }
   else browsePromo(b.dataset.tag);
 });
+function showHotTags(tags) {
+  $('hotTags').innerHTML = (tags || []).map(t => `<button type="button" data-q="${esc(t)}">${esc(t)}</button>`).join('');
+}
+(function loadHotTags() {
+  let c = null;
+  try { c = JSON.parse(localStorage.getItem('hotTags') || 'null'); } catch (e) {}
+  showHotTags(c ? c.tags : ['火鍋', '暖暖包', '暖爐']);           // 先顯示上次的，沒有就用預設
+  if (c && Date.now() - c.t < 12 * 3600 * 1000) return;           // 12 小時內不重抓
+  api({ action: 'hottags' }).then(j => {
+    if (!j.tags || !j.tags.length) return;
+    showHotTags(j.tags);
+    try { localStorage.setItem('hotTags', JSON.stringify({ t: Date.now(), tags: j.tags })); } catch (e) {}
+  }).catch(() => {});
+})();
 
 function updateFromFresh(item, price) {
   if (price == null) return;
@@ -276,7 +297,13 @@ function setNoSub(id, on) {
 }
 
 /* 畫面 */
-function setTab(t) { tab = t; $('tSearch').classList.toggle('on', t === 'search'); $('tList').classList.toggle('on', t === 'list'); render(); }
+const tabScroll = { search: 0, list: 0 };
+function setTab(t) {
+  if (t !== tab) tabScroll[tab] = window.scrollY;
+  const changed = t !== tab;
+  tab = t; $('tSearch').classList.toggle('on', t === 'search'); $('tList').classList.toggle('on', t === 'list'); render();
+  if (changed) window.scrollTo(0, tabScroll[t] || 0);   // 切回來時回到剛剛看的位置
+}
 $('tSearch').onclick = () => setTab('search');
 $('tList').onclick = () => setTab('list');
 
@@ -301,13 +328,21 @@ function card(it, inList) {
       <div class="row">${right}</div>
     </div></div>`;
 }
+let rFilter = '';
+function filteredCards() {
+  const k = rFilter.trim().toLowerCase();
+  const arr = k ? results.filter(it => String(it.name || '').toLowerCase().indexOf(k) >= 0) : results;
+  if (k && !arr.length) return `<div class="empty">這些結果裡沒有「${esc(rFilter)}」</div>`;
+  return arr.map(it => card(it, false)).join('');
+}
 function render() {
   const n = Object.keys(list).length; $('cnt').textContent = n ? `(${n})` : '';
   let h = '';
   if (tab === 'search') {
     h += `<div class="notice">如果此商品售完，我們將為您選擇替代商品</div>`;
     if (resultInfo) h += `<div class="status">${resultInfo}</div>`;
-    h += results.map(it => card(it, false)).join('');
+    if (results.length > 20) h += `<input class="rfilter" id="rfilter" type="search" placeholder="🔍 在這 ${results.length} 項裡找，例如：洗衣、餅乾" value="${esc(rFilter)}">`;
+    h += `<div id="rlist">${filteredCards()}</div>`;
   } else {
     const ts = store.get('listTs', 0);
     h += `<div class="tools"><button data-a="refresh">↻ 更新價格</button><button data-a="clear">清空清單</button></div>`;
@@ -554,6 +589,28 @@ $('shareShot').onclick = async () => {
 /* 開啟時：清單價格超過 6 小時自動更新 */
 render();
 if (gas && Object.keys(list).length && Date.now() - store.get('listTs', 0) > STALE_MS) refreshPrices(true);
+
+/* 長清單好滑：表頭高度、回頂部／回到剛剛位置、結果篩選 */
+function setHH() { document.documentElement.style.setProperty('--hh', document.querySelector('header').offsetHeight + 'px'); }
+setHH(); window.addEventListener('resize', setHH);
+let backPos = null;
+function updFab() {
+  const f = $('fab');
+  if (backPos != null) { f.textContent = '⬇ 回到剛剛位置'; f.classList.add('show'); return; }
+  f.textContent = '⬆ 回頂部';
+  f.classList.toggle('show', window.scrollY > 800);
+}
+window.addEventListener('scroll', () => { if (backPos != null && window.scrollY > backPos - 200) backPos = null; updFab(); }, { passive: true });
+$('fab').onclick = () => {
+  if (backPos != null) { const y = backPos; backPos = null; window.scrollTo({ top: y, behavior: 'smooth' }); }
+  else { const y = window.scrollY; window.scrollTo({ top: 0, behavior: 'smooth' }); setTimeout(() => { backPos = y; updFab(); }, 600); }
+  updFab();
+};
+$('main').addEventListener('input', e => {
+  if (e.target.id !== 'rfilter') return;
+  rFilter = e.target.value;
+  $('rlist').innerHTML = filteredCards();
+});
 </script>
 </body>
 </html>
